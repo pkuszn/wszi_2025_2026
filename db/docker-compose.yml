@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: chembl-postgres
+    environment:
+      POSTGRES_DB: chembl_36
+      POSTGRES_USER: chembl
+      POSTGRES_PASSWORD: chembl
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - /home/pkuszn/environments/wszi-project/db/chembl_36_postgresql:/backup:ro
+    shm_size: 1gb
+    networks:
+      - spark-net
+
+volumes:
+  pg_data:
+
+networks:
+  spark-net:
+    driver: bridge
