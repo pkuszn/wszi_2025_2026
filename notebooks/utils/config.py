@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 PG_HOST = os.getenv("PG_HOST", "192.168.1.13")
 PG_PORT = int(os.getenv("PG_PORT", 5433))
