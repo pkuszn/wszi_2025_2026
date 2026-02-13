@@ -160,7 +160,7 @@ JOIN public.compound_structures cs
   ON md.molregno = cs.molregno
 ORDER BY md.molregno;
 
----IC50 po konwersji do bazowej jednostki
+---IC50 po konwersji do bazowej jednostki, bez agregacji
 CREATE MATERIALIZED VIEW chembl_ic50_all_converted AS
 SELECT
     a.activity_id,

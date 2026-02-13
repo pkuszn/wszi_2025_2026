@@ -111,3 +111,4 @@ seaborn==0.13.2
 rdkit==2025.9.4
 scikit-learn==1.8.0
 tqdm==4.67.3
+pyarrow==23.0.0
