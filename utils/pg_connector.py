@@ -14,7 +14,7 @@ class PostgresConnector:
         )
     
     def query(self, sql, params=None) -> pd.DataFrame:
-        return pd.read_sql(sql, self.conn, params=params)
+        return pd.read_sql(sql, self.conn, params=params) # type: ignore
 
     def execute(self, sql, params=None):
         with self.conn.cursor() as cur:
