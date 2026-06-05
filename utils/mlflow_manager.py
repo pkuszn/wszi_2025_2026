@@ -24,4 +24,4 @@ class MLFlowManager:
         mlflow.set_experiment(name)
 
     def start_run(self, run_name=None):
-        return mlflow.start_run(run_name=run_name)
+        return mlflow.start_run(run_name=run_name, nested=True)

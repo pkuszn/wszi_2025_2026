@@ -4,7 +4,7 @@ from sklearn.metrics import mean_absolute_error, r2_score
 import torch
 
 
-def train_hybrid_model(model, loader, optimizer, device, mf_manager, run_name):
+def train_hybrid_model(model, loader, optimizer, device, epoch):
     """Trains the hybrid model for one epoch.
 
     Args:
@@ -12,8 +12,6 @@ def train_hybrid_model(model, loader, optimizer, device, mf_manager, run_name):
         loader: The DataLoader providing batches of molecular data.
         optimizer: The optimizer used to update model weights
         device: The device (CPU, GPU or CUDA) where computations occurs.
-        mf_manager: The MLFlow instance.
-        run_name: The name of specific training run for MLFlow logging.
     """
     model.train()
     criterion = torch.nn.MSELoss()
@@ -22,36 +20,34 @@ def train_hybrid_model(model, loader, optimizer, device, mf_manager, run_name):
     all_preds = []
     all_targets = []
 
-    with mf_manager.start_run(run_name):
-        for data in loader:
-            data = data.to(device)
-            optimizer.zero_grad()
+    for data in loader:
+        data = data.to(device)
+        optimizer.zero_grad()
 
-            out = model(data.x, data.edge_index, data.batch, data.extra_features)
-            loss = criterion(out.view(-1), data.y)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+        out = model(data.x, data.edge_index, data.batch, data.extra_features)
+        loss = criterion(out.view(-1), data.y)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
 
-            total_loss += loss.item() * data.num_graphs
+        total_loss += loss.item() * data.num_graphs
 
-            all_preds.append(out.detach().cpu().numpy().flatten())
-            all_targets.append(data.y.detach().cpu().numpy().flatten())
+        all_preds.append(out.detach().cpu().numpy().flatten())
+        all_targets.append(data.y.detach().cpu().numpy().flatten())
 
-        avg_mse = total_loss / len(loader.dataset)
-        preds = np.concatenate(all_preds)
-        targets = np.concatenate(all_targets)
+    avg_mse = total_loss / len(loader.dataset)
+    preds = np.concatenate(all_preds)
+    targets = np.concatenate(all_targets)
 
-        avg_mae = mean_absolute_error(targets, preds)
-        r2 = r2_score(targets, preds)
+    avg_mae = mean_absolute_error(targets, preds)
+    r2 = r2_score(targets, preds)
 
-        mlflow.log_metrics({
-            "train_mse": avg_mse,
-            "train_mae": avg_mae,
-            "train_r2": r2
-        })
+    print(
+        f"Epoch {epoch} | MSE: {avg_mse:.4f} | "
+        f"MAE: {avg_mae:.4f} | R2: {r2:.4f}"
+    )
 
-        print(f"Run {run_name} | MSE: {avg_mse:.4f} | MAE: {avg_mae:.4f} | R2: {r2:.4f}")
+    return avg_mse
 
 
 def evaluate_hybrid_model(model, loader, device):

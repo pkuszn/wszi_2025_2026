@@ -45,6 +45,9 @@ def mol_to_graph(smiles, target_value, extra_features_vector):
 
     data = Data(x=x, edge_index=edge_index, y=torch.tensor([target_value], dtype=torch.float))
     
-    data.extra_features = torch.tensor(extra_features_vector, dtype=torch.float)
-
+    data.extra_features = torch.tensor(
+        extra_features_vector,
+        dtype=torch.float
+    ).view(1, -1)
+    
     return data
