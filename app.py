@@ -25,7 +25,6 @@ def sanitize_smiles(smiles: str) -> str:
 @tool("ExtractSmiles")
 def extract_smiles(text: str) -> str:
     """Extracts a valid SMILES string. Use this when the user mentions a molecule."""
-    # Szukamy słów, które wyglądają jak SMILES
     words = text.split()
     for word in words:
         clean = sanitize_smiles(word)
@@ -82,7 +81,6 @@ def visualize_structure(smiles: str) -> str:
     mol = Chem.MolFromSmiles(smiles)
     if mol:
         img = Draw.MolToImage(mol)
-        # We save it to a temporary path or just return success
         img.save("structure.png")
         return "2D structure rendered and saved as structure.png"
     return "Failed to render structure"
@@ -263,5 +261,4 @@ if user_input:
             
             elif isinstance(msg, ToolMessage):
                 st.caption(f"⚙️ Tool executed: {msg.name}")
-\\
 st.divider()

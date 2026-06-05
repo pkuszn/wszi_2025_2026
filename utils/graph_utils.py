@@ -22,16 +22,16 @@ def smiles_to_graph(smiles, y_val):
     return Data(x=x, edge_index=edge_index, y=torch.tensor([y_val], dtype=torch.float))
 
 
-def mol_to_graph(smiles, target_value):
+def mol_to_graph(smiles, target_value, extra_features_vector):
     mol = Chem.MolFromSmiles(smiles)
     if not mol: return None
 
     node_feats = []
     for atom in mol.GetAtoms():
         node_feats.append([
-            atom.GetAtomicNum(),
-            atom.GetDegree(),
-            atom.GetFormalCharge(),
+            float(atom.GetAtomicNum()),
+            float(atom.GetDegree()),
+            float(atom.GetFormalCharge()),
             1.0 if atom.IsInRing() else 0.0
         ])
     x = torch.tensor(node_feats, dtype=torch.float)
@@ -43,6 +43,8 @@ def mol_to_graph(smiles, target_value):
         edges.append([j, i])
     edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
 
-    y = torch.tensor([target_value], dtype=torch.float)
+    data = Data(x=x, edge_index=edge_index, y=torch.tensor([target_value], dtype=torch.float))
+    
+    data.extra_features = torch.tensor(extra_features_vector, dtype=torch.float)
 
-    return Data(x=x, edge_index=edge_index, y=y)
+    return data
