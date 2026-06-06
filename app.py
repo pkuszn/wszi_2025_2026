@@ -1,5 +1,7 @@
 
+import os
 import re
+from typing import Optional, Tuple
 
 from langgraph.prebuilt import ToolNode, tools_condition
 import numpy as np
@@ -22,10 +24,10 @@ MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/best_model.pt"
 NUM_FEATURES = 4  
 HIDDEN_CHANNELS = 64
 
+
 def sanitize_smiles(smiles: str) -> str:
     return re.sub(r'[.=,;!\-\+]+$', '', smiles.strip())
 
-@tool("ExtractSmiles")
 def extract_smiles(text: str) -> str:
     """Extracts a valid SMILES string. Use this when the user mentions a molecule."""
     words = text.split()
@@ -35,32 +37,6 @@ def extract_smiles(text: str) -> str:
         if mol:
             return clean
     return "No valid SMILES found"
-
-@tool("BioactivityPredictor")
-def bioactivity_predictor(smiles: str) -> str:
-    """
-    Predict pIC50 for a molecule represented by SMILES.
-    """
-
-    pred, error = predict_bioactivity(smiles)
-
-    if error:
-        return error
-
-    return f"Predicted pIC50 = {pred:.2f}"
-
-@tool("Plot2DStructure")
-def plot_2d_structure(smiles: str) -> str:
-    """Prints 2d structure"""
-    mol = Chem.MolFromSmiles(smiles)
-
-    if not mol:
-        return "Invalid SMILES"
-
-    img = Draw.MolToImage(mol)
-    img.save("structure.png")
-
-    return "Saved structure.png"
 
 def calculate_descriptors(smiles):
     """Calculates descriptors using rdkit
@@ -105,7 +81,7 @@ def calculate_descriptors(smiles):
         HBA_HBD_sum
     ], dtype=np.float32)
 
-def predict_bioactivity(smiles):
+def predict_bioactivity(smiles) -> Tuple[Optional[float], Optional[str]]:
     """Tool calling func"""
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -129,7 +105,7 @@ def predict_bioactivity(smiles):
             data.extra_features # type: ignore
         )
         
-    return prediction.item(), None
+    return float(prediction.item()), None
 
 def visualize_structure(smiles: str) -> str:
     """
@@ -196,6 +172,38 @@ def visualize_gnn_graph(smiles):
     
     return fig, data
 
+@tool("BioactivityPredictor")
+def bioactivity_predictor(text: str) -> str:
+    """
+    Predict pIC50 for a molecule represented by SMILES.
+    """
+    smiles = extract_smiles(text)
+    if smiles == "No valid SMILES found":
+        return "No valid SMILES found"
+    pred, error = predict_bioactivity(smiles)
+
+    if error:
+        return error
+
+    return f"Predicted pIC50 = {pred:.2f}"
+
+@tool("Plot2DStructure")
+def plot_2d_structure(text: str):
+    """Prints 2d structure"""
+    smiles = extract_smiles(text)
+
+    if smiles == "No valid SMILES found":
+        return "No valid SMILES found"
+
+    mol = Chem.MolFromSmiles(smiles)
+
+    if not mol:
+        return "Invalid SMILES"
+
+    img = Draw.MolToImage(mol)
+
+    return img
+
 @st.cache_resource
 def load_trained_model():
     model = HybridModel(
@@ -226,24 +234,7 @@ def get_molecule_info(smiles):
     
     return f"Formula: {formula} | Exact Mass: {weight:.2f} g/mol"
 
-def run_pipeline(user_input: str):
-    smiles = extract_smiles.invoke(user_input)
-
-    if smiles == "No valid SMILES found":
-        return {
-            "smiles": None,
-            "prediction": None,
-            "error": "No valid SMILES found"
-        }
-
-    prediction = bioactivity_predictor.invoke(smiles)
-
-    return {
-        "smiles": smiles,
-        "prediction": prediction
-    }
-
-tools = [extract_smiles, bioactivity_predictor, plot_2d_structure]
+tools = [bioactivity_predictor, plot_2d_structure]
 
 llm = ChatOllama(
     model="llama3.1",
@@ -259,14 +250,13 @@ sys_msg = SystemMessage(content="""
 You are a chemistry assistant.
 
 Available tools:
-- ExtractSmiles
 - BioactivityPredictor
 - Plot2DStructure
 
 CRITICAL RULES:
 
 1. NEVER output SMILES directly in final answer.
-2. ALWAYS use ExtractSmiles if SMILES is needed.
+2. Use BioactivityPredictor exactly once for a prediction request.
 3. ALWAYS pass SMILES output to next tool without modification.
 4. If user asks ANY of the following:
    - structure
@@ -321,17 +311,28 @@ user_input = st.text_input("Your prompt (for example: 'Calculate pIC50 for C1=CC
 if user_input:
     with st.spinner('Analyzing...'):
         messages = [HumanMessage(content=user_input)]
-        
         result = graph.invoke({"messages": messages}) # type: ignore
-        
-        
+        prediction = None
+        img = None
         for msg in result["messages"]:
-            if isinstance(msg, HumanMessage):
+            if isinstance(msg, ToolMessage):
+                st.caption(f"⚙️ Tool executed: {msg.name}")
+
+                if msg.name == "BioactivityPredictor":
+                    prediction = msg.content
+
+                if msg.name == "Plot2DStructure":
+                    img = msg.content
+
+            elif isinstance(msg, HumanMessage):
                 st.markdown(f"**You:** {msg.content}")
-            
+
             elif isinstance(msg, AIMessage) and msg.content:
                 st.markdown(f"**Assistant:** {msg.content}")
-            
-            elif isinstance(msg, ToolMessage):
-                st.caption(f"⚙️ Tool executed: {msg.name}")
+
+        if prediction:
+            st.success(prediction)
+
+        if img:
+            st.image(np.array(img), caption="2D Structure")
 st.divider()
