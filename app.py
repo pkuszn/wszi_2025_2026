@@ -9,7 +9,6 @@ import streamlit as st
 import torch
 from rdkit import Chem
 from rdkit.Chem import Draw
-from models.gnn_model import GNNModel
 from models.hybrid_model import HybridModel
 from utils.graph_utils import mol_to_graph
 import networkx as nx
@@ -20,6 +19,7 @@ from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem import Descriptors, Lipinski, QED
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+import pubchempy as pcp
 MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/best_model.pt"
 NUM_FEATURES = 4  
 HIDDEN_CHANNELS = 64
@@ -200,9 +200,26 @@ def plot_2d_structure(text: str):
     if not mol:
         return "Invalid SMILES"
 
-    img = Draw.MolToImage(mol)
+    st.session_state["smiles_to_image"] = smiles
 
-    return img
+    return "Structure generated"
+
+@tool("IupacName")
+def get_iupac_name(text: str):
+    """Gets the iupac name of smiles.
+
+    Args:
+        text (str): Smiles
+    """
+    smiles = extract_smiles(text)
+
+    if smiles == "No valid SMILES found":
+        return "No valid SMILES found"
+        
+    compounds = pcp.get_compounds(smiles, "smiles")
+
+    if compounds: # type: ignore
+        return compounds[0].iupac_name
 
 @st.cache_resource
 def load_trained_model():
@@ -234,7 +251,7 @@ def get_molecule_info(smiles):
     
     return f"Formula: {formula} | Exact Mass: {weight:.2f} g/mol"
 
-tools = [bioactivity_predictor, plot_2d_structure]
+tools = [bioactivity_predictor, plot_2d_structure, get_iupac_name]
 
 llm = ChatOllama(
     model="llama3.1",
@@ -252,13 +269,15 @@ You are a chemistry assistant.
 Available tools:
 - BioactivityPredictor
 - Plot2DStructure
+- IupacName
 
 CRITICAL RULES:
 
 1. NEVER output SMILES directly in final answer.
-2. Use BioactivityPredictor exactly once for a prediction request.
-3. ALWAYS pass SMILES output to next tool without modification.
-4. If user asks ANY of the following:
+2. ALWAYS call IupacName tool and print the name for user.
+3. Use BioactivityPredictor exactly once for a prediction request.
+4. ALWAYS pass SMILES output to next tool without modification.
+5. If user asks ANY of the following:
    - structure
    - image
    - draw
@@ -266,14 +285,19 @@ CRITICAL RULES:
    - show molecule
    → you MUST call Plot2DStructure tool
 
-5. If user asks:
+6. If user asks:
    - pIC50
    - activity
    → use BioactivityPredictor
 
-6. You may chain tools, but MUST NOT skip tool execution.
+7. You may chain tools, but MUST NOT skip tool execution.
 
-7. Final answer must be based ONLY on tool outputs.
+8. Final answer must be based ONLY on tool outputs.
+                        
+9. If user asks:
+    - compound name
+    - name
+    → use IupacName                 
 """)
 
 def assistant(state: MessagesState):
@@ -296,9 +320,9 @@ builder.add_edge("tools", "assistant")
 graph = builder.compile()
 
 
-st.set_page_config(page_title="ChEMBL GNN Predictor", layout="wide")
+st.set_page_config(page_title="ChEMBL GNN+MLP Predictor", layout="wide")
 
-st.title("🔬 Molecular GNN Assistant")
+st.title("🔬 Molecular GNN+MLP Assistant")
 st.markdown("Enter SMILES.")
 
 with st.sidebar:
@@ -314,6 +338,7 @@ if user_input:
         result = graph.invoke({"messages": messages}) # type: ignore
         prediction = None
         img = None
+        iupac = None
         for msg in result["messages"]:
             if isinstance(msg, ToolMessage):
                 st.caption(f"⚙️ Tool executed: {msg.name}")
@@ -324,6 +349,9 @@ if user_input:
                 if msg.name == "Plot2DStructure":
                     img = msg.content
 
+                if msg.name == "IupacName":
+                    iupac = msg.content
+
             elif isinstance(msg, HumanMessage):
                 st.markdown(f"**You:** {msg.content}")
 
@@ -333,6 +361,11 @@ if user_input:
         if prediction:
             st.success(prediction)
 
-        if img:
-            st.image(np.array(img), caption="2D Structure")
+        if img and "smiles_to_image" in st.session_state:
+            mol = Chem.MolFromSmiles(st.session_state["smiles_to_image"])
+            img = Draw.MolToImage(mol)
+            st.image(img)
+
+        if iupac:
+            st.info(iupac)
 st.divider()
