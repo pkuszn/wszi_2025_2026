@@ -62,11 +62,6 @@ def calculate_descriptors(smiles):
 
     logP_over_PSA = alogp / (psa + 1e-6)
 
-    HBA_HBD_ratio = (
-        hba if hbd == 0
-        else hba / hbd
-    )
-
     HBA_HBD_sum = hba + hbd
 
     return np.array([
@@ -77,7 +72,6 @@ def calculate_descriptors(smiles):
         num_ro5_violations,
         qed_weighted,
         logP_over_PSA,
-        HBA_HBD_ratio,
         HBA_HBD_sum
     ], dtype=np.float32)
 
@@ -225,7 +219,7 @@ def get_iupac_name(text: str):
 def load_trained_model():
     model = HybridModel(
         num_node_features=4,
-        num_extra_features=9,
+        num_extra_features=8,
         hidden_channels=64
     )
         
@@ -260,7 +254,7 @@ llm = ChatOllama(
 
 features = [
     'alogp', 'psa', 'hba', 'hbd', 'num_ro5_violations', 'qed_weighted',
-    'logP_over_PSA', 'HBA_HBD_ratio', 'HBA_HBD_sum'
+    'logP_over_PSA', 'HBA_HBD_sum'
 ]
 
 sys_msg = SystemMessage(content="""

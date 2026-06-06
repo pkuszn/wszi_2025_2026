@@ -42,8 +42,10 @@ class HybridModel(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Linear(num_extra_features, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Linear(64, 32),
+            nn.BatchNorm1d(64),
             nn.ReLU()
         )
 
@@ -91,7 +93,11 @@ class HybridModel(nn.Module):
             f"mean={extra.mean().item():.4f}"
         )
 
+        self.combined_bn = nn.BatchNorm1d(self.combined_dim)
+
         combined = torch.cat([x, extra], dim=1)
+
+        combined = self.combined_bn(combined)
 
         logger.info(
             f"Combined: min={combined.min().item():.4f} "

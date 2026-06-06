@@ -209,3 +209,67 @@ WHERE a.standard_type = 'IC50'
   AND a.standard_value > 0
   AND asy.assay_organism = 'Homo sapiens'
   AND a.data_validity_comment IS NULL;
+
+--- Widok zmaterializowany do pobierania deskryptorów
+CREATE MATERIALIZED VIEW chembl_pic50_ml_ready AS
+WITH filtered AS (
+    SELECT
+        a.activity_id,
+        a.assay_id,
+        a.molregno,
+        cs.canonical_smiles,
+        a.standard_value,
+        a.standard_units,
+        a.standard_type,
+        a.relation,
+        a.pchembl_value,
+        a.data_validity_comment,
+        a.activity_comment,
+        a.src_id,
+
+        -- IC50 -> molar conversion
+        CASE
+            WHEN a.standard_units = 'nM' THEN a.standard_value * 1e-9
+            WHEN a.standard_units = 'uM' THEN a.standard_value * 1e-6
+            WHEN a.standard_units = 'mM' THEN a.standard_value * 1e-3
+            WHEN a.standard_units = 'pM' THEN a.standard_value * 1e-12
+            ELSE NULL
+        END AS ic50_molar,
+
+        -- pIC50
+        CASE
+            WHEN a.standard_units IN ('nM','uM','mM','pM')
+                 AND a.standard_value > 0
+            THEN -LOG(10, a.standard_value *
+                CASE
+                    WHEN a.standard_units = 'nM' THEN 1e-9
+                    WHEN a.standard_units = 'uM' THEN 1e-6
+                    WHEN a.standard_units = 'mM' THEN 1e-3
+                    WHEN a.standard_units = 'pM' THEN 1e-12
+                END)
+            ELSE NULL
+        END AS pIC50
+
+    FROM public.activities a
+    JOIN public.compound_structures cs
+        ON a.molregno = cs.molregno
+    JOIN public.assays asy
+        ON a.assay_id = asy.assay_id
+    WHERE
+        a.standard_type = 'IC50'
+        AND a.relation = '='
+        AND a.standard_value IS NOT NULL
+        AND a.standard_value > 0
+        AND a.data_validity_comment IS NULL
+        AND asy.assay_organism = 'Homo sapiens'
+)
+
+SELECT
+    canonical_smiles,
+    assay_id,
+    molregno,
+    pIC50,
+    standard_units,
+    ic50_molar
+FROM filtered
+WHERE pIC50 IS NOT NULL;
