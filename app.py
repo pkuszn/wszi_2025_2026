@@ -2,20 +2,23 @@
 import re
 
 from langgraph.prebuilt import ToolNode, tools_condition
+import numpy as np
 import streamlit as st
 import torch
 from rdkit import Chem
 from rdkit.Chem import Draw
 from models.gnn_model import GNNModel
+from models.hybrid_model import HybridModel
 from utils.graph_utils import mol_to_graph
 import networkx as nx
 import matplotlib.pyplot as plt
 from langchain_ollama import ChatOllama
 from langchain_core.tools import tool
 from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import Descriptors, Lipinski, QED
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_GCN_weights.pth"
+MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/best_model.pt"
 NUM_FEATURES = 4  
 HIDDEN_CHANNELS = 64
 
@@ -59,17 +62,72 @@ def plot_2d_structure(smiles: str) -> str:
 
     return "Saved structure.png"
 
+def calculate_descriptors(smiles):
+    """Calculates descriptors using rdkit
+
+    Args:
+        smiles: Smiles
+    """
+    mol = Chem.MolFromSmiles(smiles)
+
+    alogp = Descriptors.MolLogP(mol) # type: ignore
+    psa = Descriptors.TPSA(mol) # type: ignore
+    hba = Lipinski.NumHAcceptors(mol) # type: ignore
+    hbd = Lipinski.NumHDonors(mol) # type: ignore
+
+    num_ro5_violations = (
+        int(alogp > 5)
+        + int(Descriptors.MolWt(mol) > 500) # type: ignore
+        + int(hba > 10)
+        + int(hbd > 5)
+    )
+
+    qed_weighted = QED.qed(mol)
+
+    logP_over_PSA = alogp / (psa + 1e-6)
+
+    HBA_HBD_ratio = (
+        hba if hbd == 0
+        else hba / hbd
+    )
+
+    HBA_HBD_sum = hba + hbd
+
+    return np.array([
+        alogp,
+        psa,
+        hba,
+        hbd,
+        num_ro5_violations,
+        qed_weighted,
+        logP_over_PSA,
+        HBA_HBD_ratio,
+        HBA_HBD_sum
+    ], dtype=np.float32)
+
 def predict_bioactivity(smiles):
     """Tool calling func"""
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
         return None, "Invalid SMILES format"
-    
-    data = mol_to_graph(smiles, target_value=0)
+
+    extra_features = calculate_descriptors(smiles)
+    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=extra_features)
     
     model = load_trained_model() 
     with torch.no_grad():
-        prediction = model(data.x, data.edge_index, data.batch) # type: ignore
+        if not hasattr(data, "batch"):
+            data.batch = torch.zeros( # type: ignore
+                data.x.size(0), # type: ignore
+                dtype=torch.long
+            )
+
+        prediction = model(
+            data.x, # type: ignore
+            data.edge_index, # type: ignore
+            data.batch, # type: ignore
+            data.extra_features # type: ignore
+        )
         
     return prediction.item(), None
 
@@ -104,7 +162,8 @@ def visualize_gnn_graph(smiles):
     if not mol:
         return None
     
-    data = mol_to_graph(smiles, target_value=0)
+    extra_features = calculate_descriptors(smiles)
+    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=extra_features)
     atom_labels = {idx: atom.GetSymbol() for idx, atom in enumerate(mol.GetAtoms())}
 
     G = nx.Graph()
@@ -139,12 +198,24 @@ def visualize_gnn_graph(smiles):
 
 @st.cache_resource
 def load_trained_model():
-    model = GNNModel(num_node_features=NUM_FEATURES, hidden_channels=HIDDEN_CHANNELS)
-    
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
+    model = HybridModel(
+        num_node_features=4,
+        num_extra_features=9,
+        hidden_channels=64
+    )
+        
+    checkpoint = torch.load(
+        MODEL_PATH,
+        map_location=torch.device("cpu")
+    )
+
+    model.load_state_dict(
+        checkpoint["model_state_dict"]
+    )
     model.eval()
 
     return model
+
 def get_molecule_info(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
@@ -154,7 +225,6 @@ def get_molecule_info(smiles):
     weight = rdMolDescriptors.CalcExactMolWt(mol)
     
     return f"Formula: {formula} | Exact Mass: {weight:.2f} g/mol"
-
 
 def run_pipeline(user_input: str):
     smiles = extract_smiles.invoke(user_input)
@@ -173,7 +243,6 @@ def run_pipeline(user_input: str):
         "prediction": prediction
     }
 
-
 tools = [extract_smiles, bioactivity_predictor, plot_2d_structure]
 
 llm = ChatOllama(
@@ -181,6 +250,10 @@ llm = ChatOllama(
     temperature=0,
 ).bind_tools(tools)
 
+features = [
+    'alogp', 'psa', 'hba', 'hbd', 'num_ro5_violations', 'qed_weighted',
+    'logP_over_PSA', 'HBA_HBD_ratio', 'HBA_HBD_sum'
+]
 
 sys_msg = SystemMessage(content="""
 You are a chemistry assistant.
