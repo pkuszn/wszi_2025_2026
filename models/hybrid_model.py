@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from torch_geometric.nn import GINConv, global_add_pool, BatchNorm, global_mean_pool
+from torch_geometric.nn import GINConv, BatchNorm, global_mean_pool
 import logging
 
 logging.basicConfig(
@@ -42,14 +42,15 @@ class HybridModel(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Linear(num_extra_features, 64),
-            nn.BatchNorm1d(64),
+            nn.LayerNorm(64),
             nn.ReLU(),
             nn.Linear(64, 32),
-            nn.BatchNorm1d(64),
+            nn.LayerNorm(32),
             nn.ReLU()
         )
 
-        self.combined_dim = hidden_channels + 32
+        self.combined_dim = hidden_channels + 32 
+        self.combined_bn = nn.LayerNorm(self.combined_dim)
 
         self.regressor = nn.Sequential(
             nn.Linear(self.combined_dim, 64),
@@ -92,8 +93,6 @@ class HybridModel(nn.Module):
             f"max={extra.max().item():.4f} "
             f"mean={extra.mean().item():.4f}"
         )
-
-        self.combined_bn = nn.BatchNorm1d(self.combined_dim)
 
         combined = torch.cat([x, extra], dim=1)
 

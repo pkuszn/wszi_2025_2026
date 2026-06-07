@@ -43,8 +43,10 @@ def train_hybrid_model(model, loader, optimizer, device, epoch):
     r2 = r2_score(targets, preds)
 
     print(
-        f"Epoch {epoch} | MSE: {avg_mse:.4f} | "
-        f"MAE: {avg_mae:.4f} | R2: {r2:.4f}"
+        f"Epoch {epoch} | "
+        f"TRAIN_MSE={avg_mse:.4f} | "
+        f"TRAIN_MAE={avg_mae:.4f} | "
+        f"TRAIN_R2={r2:.4f}"
     )
 
     return avg_mse
@@ -73,3 +75,4 @@ def evaluate_hybrid_model(model, loader, device):
     targets = np.concatenate(all_targets)
     
     return r2_score(targets, preds), mean_absolute_error(targets, preds), targets, preds
+

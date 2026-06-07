@@ -20,7 +20,7 @@ from rdkit.Chem import Descriptors, Lipinski, QED
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 import pubchempy as pcp
-MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/best_model.pt"
+MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_Hybrid_tune_3_1780865666_weights.pth"
 NUM_FEATURES = 4  
 HIDDEN_CHANNELS = 64
 
@@ -85,6 +85,8 @@ def predict_bioactivity(smiles) -> Tuple[Optional[float], Optional[str]]:
     data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=extra_features)
     
     model = load_trained_model() 
+    for name, module in model.named_modules():
+        print(name, type(module))
     with torch.no_grad():
         if not hasattr(data, "batch"):
             data.batch = torch.zeros( # type: ignore
@@ -220,7 +222,7 @@ def load_trained_model():
     model = HybridModel(
         num_node_features=4,
         num_extra_features=8,
-        hidden_channels=64
+        hidden_channels=128
     )
         
     checkpoint = torch.load(
