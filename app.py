@@ -1,10 +1,10 @@
 
-import os
 import re
 from typing import Optional, Tuple
 
 from langgraph.prebuilt import ToolNode, tools_condition
 import numpy as np
+from sklearn.preprocessing import RobustScaler, StandardScaler
 import streamlit as st
 import torch
 from rdkit import Chem
@@ -20,9 +20,10 @@ from rdkit.Chem import Descriptors, Lipinski, QED
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 import pubchempy as pcp
-MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_Hybrid_tune_3_1780865666_weights.pth"
-NUM_FEATURES = 4  
-HIDDEN_CHANNELS = 64
+MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_RECOVERED_Hybrid_tune_3_1781198740_weights.pth"
+NUM_FEATURES = 10 
+NUM_EXTRA_FEATURES = 8 
+HIDDEN_CHANNELS = 128
 
 
 def sanitize_smiles(smiles: str) -> str:
@@ -81,10 +82,14 @@ def predict_bioactivity(smiles) -> Tuple[Optional[float], Optional[str]]:
     if not mol:
         return None, "Invalid SMILES format"
 
+    model, global_scaler, atom_scaler = load_trained_model() 
+
     extra_features = calculate_descriptors(smiles)
-    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=extra_features)
+
+    scaled_extra = global_scaler.transform(extra_features.reshape(1, -1))
+
+    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=scaled_extra, atom_scaler=atom_scaler)
     
-    model = load_trained_model() 
     for name, module in model.named_modules():
         print(name, type(module))
     with torch.no_grad():
@@ -134,8 +139,13 @@ def visualize_gnn_graph(smiles):
     if not mol:
         return None
     
+    _, global_scaler, atom_scaler = load_trained_model() 
+
     extra_features = calculate_descriptors(smiles)
-    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=extra_features)
+
+    scaled_extra = global_scaler.transform(extra_features.reshape(1, -1))
+
+    data = mol_to_graph(smiles=smiles, target_value=0, extra_features_vector=scaled_extra, atom_scaler=atom_scaler)
     atom_labels = {idx: atom.GetSymbol() for idx, atom in enumerate(mol.GetAtoms())}
 
     G = nx.Graph()
@@ -220,14 +230,15 @@ def get_iupac_name(text: str):
 @st.cache_resource
 def load_trained_model():
     model = HybridModel(
-        num_node_features=4,
-        num_extra_features=8,
-        hidden_channels=128
+        num_node_features=NUM_FEATURES,
+        num_extra_features=NUM_EXTRA_FEATURES,
+        hidden_channels=HIDDEN_CHANNELS
     )
-        
+    
     checkpoint = torch.load(
-        MODEL_PATH,
-        map_location=torch.device("cpu")
+        MODEL_PATH, 
+        map_location=torch.device('cpu'),
+        weights_only=False
     )
 
     model.load_state_dict(
@@ -235,7 +246,8 @@ def load_trained_model():
     )
     model.eval()
 
-    return model
+    return model, checkpoint["global_scaler"], checkpoint["atom_scaler"]
+    
 
 def get_molecule_info(smiles):
     mol = Chem.MolFromSmiles(smiles)
