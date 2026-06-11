@@ -205,9 +205,7 @@ def plot_2d_structure(text: str):
     if not mol:
         return "Invalid SMILES"
 
-    st.session_state["smiles_to_image"] = smiles
-
-    return "Structure generated"
+    return f"STRUCTURE_DATA:{smiles}"
 
 @tool("IupacName")
 def get_iupac_name(text: str):
@@ -305,6 +303,8 @@ CRITICAL RULES:
     - compound name
     - name
     → use IupacName                 
+                        
+10. DO NOT try to draw the molecule with text
 """)
 
 def assistant(state: MessagesState):
@@ -353,8 +353,11 @@ if user_input:
                 if msg.name == "BioactivityPredictor":
                     prediction = msg.content
 
-                if msg.name == "Plot2DStructure":
-                    img = msg.content
+                if msg.name == "Plot2DStructure" and "STRUCTURE_DATA:" in msg.content:
+                    smiles_str = msg.content.split("STRUCTURE_DATA:")[1] # type: ignore
+                    mol = Chem.MolFromSmiles(smiles_str)
+                    if mol:
+                        img = Draw.MolToImage(mol)
 
                 if msg.name == "IupacName":
                     iupac = msg.content
@@ -368,10 +371,8 @@ if user_input:
         if prediction:
             st.success(prediction)
 
-        if img and "smiles_to_image" in st.session_state:
-            mol = Chem.MolFromSmiles(st.session_state["smiles_to_image"])
-            img = Draw.MolToImage(mol)
-            st.image(img)
+        if img is not None:
+            st.image(img, caption="Molecule Structure", use_container_width=True)
 
         if iupac:
             st.info(iupac)
