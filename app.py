@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 
 from langgraph.prebuilt import ToolNode, tools_condition
 import numpy as np
-from sklearn.preprocessing import RobustScaler, StandardScaler
 import streamlit as st
 import torch
 from rdkit import Chem
@@ -20,7 +19,7 @@ from rdkit.Chem import Descriptors, Lipinski, QED
 from langgraph.graph import END, MessagesState, StateGraph
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 import pubchempy as pcp
-MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_RECOVERED_Hybrid_tune_3_1781198740_weights.pth"
+MODEL_PATH = "/home/pkuszn/repos/WSzI/src/notebooks/model_Hybrid_tune_0_1781204396_weights.pth"
 NUM_FEATURES = 10 
 NUM_EXTRA_FEATURES = 8 
 HIDDEN_CHANNELS = 128

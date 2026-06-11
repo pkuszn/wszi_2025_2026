@@ -25,6 +25,7 @@ class HybridModel(nn.Module):
         nn1 = nn.Sequential(
             nn.Linear(num_node_features, hidden_channels),
             nn.ReLU(), 
+            nn.Dropout(0.2),
             nn.Linear(hidden_channels, hidden_channels)
         ) # Initializes the module in sequential order
 
@@ -34,6 +35,7 @@ class HybridModel(nn.Module):
         nn2 = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels), 
             nn.ReLU(), 
+            nn.Dropout(0.2),
             nn.Linear(hidden_channels, hidden_channels)
         )
 
@@ -55,7 +57,7 @@ class HybridModel(nn.Module):
         self.regressor = nn.Sequential(
             nn.Linear(self.combined_dim, 64),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.5),
             nn.Linear(64, 1)
         )
 
