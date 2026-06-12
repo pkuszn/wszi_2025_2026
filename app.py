@@ -329,7 +329,7 @@ graph = builder.compile()
 
 st.set_page_config(page_title="ChEMBL GNN+MLP Predictor", layout="wide")
 
-st.title("🔬 Molecular GNN+MLP Assistant")
+st.title("🔬 GNN+MLP Bioactivity Prediction")
 st.markdown("Enter SMILES.")
 
 with st.sidebar:
